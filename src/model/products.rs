@@ -68,4 +68,8 @@ pub enum Products {
     Layer,
     #[serde(rename = "pay_by_bank")]
     PayByBank,
+    #[serde(rename = "cra_plaid_credit_score")]
+    CraPlaidCreditScore,
+    #[serde(untagged)]
+    Unknown(String)
 }
