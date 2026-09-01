@@ -6,7 +6,8 @@ pub struct MortgageLiability {
     ///The ID of the account that this liability belongs to.
     pub account_id: String,
     ///The account number of the loan.
-    pub account_number: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_number: Option<String>,
     ///The current outstanding amount charged for late payment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_late_fee: Option<f64>,
