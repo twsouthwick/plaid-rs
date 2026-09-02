@@ -6,6 +6,8 @@ use std::sync::OnceLock;
 pub mod model;
 pub mod request;
 
+pub use request::transactions_sync::TransactionsSyncRequest;
+
 pub fn default_http_client() -> Client {
     let environment = std::env::var("PLAID_ENV")
         .expect("Missing environment variable PLAID_ENV")

@@ -28,6 +28,71 @@ impl FluentRequest<'_, TransactionsSyncRequest> {
         self.params.options = Some(options);
         self
     }
+
+    ///Fetch the full transaction sync result set, restarting pagination from the
+    ///initial cursor whenever Plaid reports that a mutation occurred during pagination.
+    pub async fn fetch_all(self) -> httpclient::InMemoryResult<crate::model::TransactionsSyncResponse> {
+        let initial_cursor = self.params.cursor.clone().unwrap_or_default();
+        let mut restart_count = 0usize;
+
+        'outer: loop {
+            let mut cursor = initial_cursor.clone();
+            let mut merged: Option<crate::model::TransactionsSyncResponse> = None;
+
+            'page_loop: loop {
+                let mut request = self.client.transactions_sync(&self.params.access_token);
+                if let Some(count) = self.params.count {
+                    request = request.count(count);
+                }
+                if let Some(ref options) = self.params.options {
+                    request = request.options(options.clone());
+                }
+                if !cursor.is_empty() || self.params.cursor.is_some() {
+                    request = request.cursor(&cursor);
+                }
+
+                match request.await {
+                    Ok(page) => {
+                        match &mut merged {
+                            Some(existing) => {
+                                existing.accounts.extend(page.accounts);
+                                existing.added.extend(page.added);
+                                existing.modified.extend(page.modified);
+                                existing.removed.extend(page.removed);
+                                existing.request_id = page.request_id.clone();
+                                existing.next_cursor = page.next_cursor.clone();
+                                existing.has_more = page.has_more;
+                                existing.transactions_update_status = page.transactions_update_status.clone();
+                            }
+                            None => {
+                                merged = Some(page);
+                            }
+                        }
+
+                        cursor = merged
+                            .as_ref()
+                            .map(|response| response.next_cursor.clone())
+                            .unwrap_or_default();
+
+                        if !merged.as_ref().map(|response| response.has_more).unwrap_or(false) {
+                            break 'page_loop;
+                        }
+                    }
+                    Err(err) if format!("{err}").contains("TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION") => {
+                        if restart_count >= 3 {
+                            return Err(err);
+                        }
+                        restart_count += 1;
+                        cursor = initial_cursor.clone();
+                        continue 'outer;
+                    }
+                    Err(err) => return Err(err),
+                }
+            }
+
+            return Ok(merged.expect("transactions sync should return at least one page"));
+        }
+    }
 }
 impl<'a> ::std::future::IntoFuture for FluentRequest<'a, TransactionsSyncRequest> {
     type Output = httpclient::InMemoryResult<crate::model::TransactionsSyncResponse>;
